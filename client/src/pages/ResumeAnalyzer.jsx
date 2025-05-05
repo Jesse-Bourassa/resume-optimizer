@@ -1,4 +1,81 @@
 import { useState } from "react";
+import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
+import "react-circular-progressbar/dist/styles.css";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
+import SubscriptionModal from "../context/paywall";
+// Centralised inline‑style map – keeps JSX tidy
+const styles = {
+  page: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "flex-start",
+    minHeight: "100vh",
+    background: "#0d0d0d",
+    color: "#f0f0f0",
+    fontFamily: "Inter, sans-serif",
+    padding: "2rem",
+  },
+  card: {
+    background: "#1a1a1a",
+    padding: "2rem",
+    borderRadius: "12px",
+    width: "100%",
+    maxWidth: "700px",
+    boxShadow: "0 0 20px rgba(0,0,0,0.4)",
+  },
+  title: {
+    fontSize: "2rem",
+    marginBottom: "1.5rem",
+    textAlign: "center",
+    color: "#00ffe7",
+    textShadow: "0 0 8px #00ffe7",
+    display: "flex",
+    gap: "0.5rem",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  input: {
+    padding: "0.75rem",
+    border: "1px solid #333",
+    borderRadius: "6px",
+    background: "#2a2a2a",
+    color: "#f0f0f0",
+    marginBottom: "1rem",
+    width: "100%",
+  },
+  button: {
+    width: "100%",
+    padding: "0.75rem",
+    background: "#00d26a",
+    color: "#fff",
+    fontWeight: 600,
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    transition: "background 0.3s",
+  },
+  buttonDisabled: {
+    background: "#555",
+    cursor: "not-allowed",
+  },
+  scoreWrapper: { marginTop: "2rem", textAlign: "center" },
+  progressWrapper: { width: 150, margin: "1rem auto" },
+  resultBox: {
+    marginTop: "2rem",
+    background: "#1b1b1b",
+    padding: "1.5rem",
+    borderRadius: "12px",
+    whiteSpace: "pre-wrap",
+    overflowX: "auto",
+    fontSize: "0.95rem",
+    lineHeight: 1.6,
+    border: "1px solid #00ffe7",
+    boxShadow: "0 0 15px rgba(0,255,231,0.3)",
+    animation: "fadeInUp 0.8s ease 0.3s both",
+  },
+};
+  
 
 const Spinner = () => (
     <div style={{ textAlign: "center", marginTop: "1rem" }}>
@@ -18,9 +95,14 @@ const Spinner = () => (
   
 
 function ResumeAnalyzer() {
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [file, setFile] = useState(null);
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+
+  console.log("user:", currentUser);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -40,7 +122,33 @@ function ResumeAnalyzer() {
   const [score, setScore] = useState(null);
 
   const handleUpload = async () => {
-    if (!file) return alert("Please select a resume file.");
+    if (!currentUser) {
+      alert("User not loaded. Try again shortly.");
+      return;
+    }
+
+    if (!file) {
+      alert("Please select a resume file.");
+      return;
+    }
+
+    if (!currentUser?.isSubscribed && !localStorage.getItem("isSubscribed")) {
+      try {
+        const res = await fetch(`http://localhost:5000/api/stripe/check-subscription?email=${currentUser.email}`);
+        const data = await res.json();
+        if (data.success) {
+          localStorage.setItem("isSubscribed", "true");
+        } else {
+          console.log("triggering modal");
+          setShowSubscribeModal(true);
+          return;  
+        }
+      } catch (err) {
+        console.error("Subscription check failed:", err);
+        setShowSubscribeModal(true);
+        return;
+      }
+    }
 
     const formData = new FormData();
     formData.append("resume", file);
@@ -60,9 +168,8 @@ function ResumeAnalyzer() {
       setScore(0); // reset to 0 first
 
       setTimeout(() => {
-      setScore(extracted); // allow smooth animation after a tick
-      }, 100); // small delay to trigger CSS transition;
-
+        setScore(extracted); // allow smooth animation after a tick
+      }, 100);
     } catch (err) {
       console.error(err);
       setResult("Server error.");
@@ -73,64 +180,27 @@ function ResumeAnalyzer() {
 
   return (
     <div
-  style={{
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "flex-start", // change to "center" if you want vertical centering too
-    minHeight: "100vh",
-    background: "#0d0d0d",
-    color: "#f0f0f0",
-    fontFamily: "sans-serif",
-    padding: "2rem",
-  }}
+  style={styles.page}
 >
-      <div style={{ maxWidth: "700px", margin: "auto" }}>
+      <div style={styles.card}>
       <h1
-  style={{
-    fontSize: "2rem",
-    marginBottom: "1rem",
-    textAlign: "center",
-    color: "#00ffe7",
-    textShadow: "0 0 10px #00ffe7, 0 0 20px #00ffe7",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "0.5rem",
-  }}
+  style={styles.title}
 >
   📄 Resume Optimizer
 </h1>
   
-        <div style={{ background: "#1a1a1a", padding: "2rem", borderRadius: "12px" }}>
+        <div>
           <input
             type="file"
             accept=".pdf"
             onChange={handleFileChange}
-            style={{
-              padding: "0.5rem",
-              border: "1px solid #333",
-              borderRadius: "6px",
-              background: "#2a2a2a",
-              color: "#f0f0f0",
-              marginBottom: "1rem",
-              width: "100%",
-            }}
+            style={styles.input}
           />
   
           <button
             onClick={handleUpload}
             disabled={loading}
-            style={{
-              width: "100%",
-              padding: "0.75rem",
-              background: loading ? "#555" : "#00d26a",
-              color: "#fff",
-              fontWeight: "bold",
-              border: "none",
-              borderRadius: "6px",
-              cursor: loading ? "not-allowed" : "pointer",
-              transition: "0.3s",
-            }}
+            style={loading ? { ...styles.button, ...styles.buttonDisabled } : styles.button}
           >
             {loading ? "Analyzing..." : "Upload & Analyze"}
           </button>
@@ -140,70 +210,46 @@ function ResumeAnalyzer() {
   
         {result && (
   <div
-    style={{
-      marginTop: "2rem",
-      opacity: result ? 1 : 0,
-      transform: result ? "translateY(0)" : "translateY(20px)",
-      transition: "all 0.8s ease",
-    }}
+    style={styles.scoreWrapper}
   >
     <h2 style={{ textAlign: "center" }}>Resume Score</h2>
-    <div
-      style={{
-        background: "#333",
-        height: "20px",
-        borderRadius: "10px",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: `${score || 0}%`,
-          height: "100%",
-          background: getScoreColor(extractScore(result)),
-          transition: "width 1.5s ease",
-        }}
+    <div style={styles.progressWrapper}>
+      <CircularProgressbar
+        value={score || 0}
+        maxValue={100}
+        text={`${score || 0}`}
+        styles={buildStyles({
+          textColor: getScoreColor(score),
+          pathColor: getScoreColor(score),
+          trailColor: "#333",
+          textSize: "20px",
+        })}
       />
     </div>
-    <p
-      style={{
-        textAlign: "center",
-        marginTop: "0.5rem",
-        color: getScoreColor(extractScore(result)),
-        transition: "opacity 1.5s ease",
-        opacity: result ? 1 : 0,
-      }}
-    >
-      {score}/100
-    </p>
   </div>
 )}
 
 {result && (
   <div
-    style={{
-      marginTop: "2rem",
-      background: "#1b1b1b",
-      padding: "1.5rem",
-      borderRadius: "12px",
-      whiteSpace: "pre-wrap",
-      overflowX: "auto",
-      fontSize: "0.95rem",
-      lineHeight: "1.6",
-      border: "1px solid #00ffe7",
-      boxShadow: "0 0 15px rgba(0, 255, 231, 0.3)",
-      opacity: 1,
-      transform: "translateY(0)",
-      animation: "fadeInUp 1s ease 0.5s both",
-    }}
+    style={styles.resultBox}
   >
     {result}
   </div>
 )}
 
       </div>
+      {/* Subscribe Modal */}
+      <SubscriptionModal
+        open={showSubscribeModal}
+        onClose={() => setShowSubscribeModal(false)}
+        onSubscribe={() => {
+          setShowSubscribeModal(false);
+          // Optional: redirect or trigger purchase logic
+        }}
+      />
     </div>
   );
 }
 
 export default ResumeAnalyzer;
+console.log("Subscription modal loaded?", !!SubscriptionModal);
